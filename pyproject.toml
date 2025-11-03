@@ -137,3 +137,17 @@ markers = [
   "integration: marks integration tests",
   "asyncio: marks tests as asyncio"
 ]
+
+[tool.coverage.run]
+source = ["src/impactscan"]
+omit = [
+    "src/impactscan/cache/*",
+    "src/impactscan/concurrency/*",
+    "src/impactscan/llm/*",
+    "src/impactscan/pipeline/*",
+    "src/impactscan/preprocess/*",
+    "src/impactscan/report/*",
+    "src/impactscan/scanner/*",
+    "src/impactscan/settings.py",
+    "src/impactscan/engine.py",
+]
