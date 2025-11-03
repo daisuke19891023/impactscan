@@ -1,0 +1,1 @@
+"""ImpactScan scanner package."""

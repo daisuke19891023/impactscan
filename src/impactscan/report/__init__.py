@@ -1,0 +1,1 @@
+"""ImpactScan report package."""
