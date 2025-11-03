@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+
+from impactscan.errors import ConfigError
 
 
 def _default_deployments() -> dict[Literal["small", "large"], str]:
@@ -94,6 +96,18 @@ class ImpactScanConfig(BaseModel):
     azure_openai: AzureOpenAIConfig = Field(default_factory=AzureOpenAIConfig)
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+
+    def __init__(self, **data: object) -> None:
+        """Validate incoming data and surface ConfigError on failure."""
+        try:
+            super().__init__(**data)
+        except ValidationError as exc:
+            msg = "Invalid ImpactScan configuration"
+            raise ConfigError(msg) from exc
+
+        if not self.target_dir or not self.target_dir.strip():
+            msg = "target_dir must be a non-empty string"
+            raise ConfigError(msg)
 
 
 __all__ = [

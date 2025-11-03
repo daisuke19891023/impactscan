@@ -1,9 +1,12 @@
 """Data models for ImpactScan domain objects."""
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Sequence
+from typing import Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+EXPECTED_SPAN_LENGTH = 2
 
 
 def _default_spans() -> list[tuple[int, int]]:
@@ -41,9 +44,46 @@ class CandidateFileWindow(BaseModel):
     file: str
     spans: list[tuple[int, int]] = Field(default_factory=_default_spans)
     hits: list[CandidateHit] = Field(default_factory=_default_hits)
-    num_occurrences: int = 0
+    num_occurrences: int = Field(default=0, ge=0)
     file_hash: str | None = None
     commit: str | None = None
+
+    @field_validator("spans", mode="before")
+    @classmethod
+    def _validate_spans(cls, value: object) -> list[tuple[int, int]]:
+        """Ensure spans are ordered 1-based tuples."""
+        if value is None:
+            return []
+
+        if isinstance(value, CandidateFileWindow):
+            return value.spans
+
+        if not isinstance(value, Sequence):
+            msg = "Spans must be provided as a sequence"
+            raise TypeError(msg)
+
+        normalised: list[tuple[int, int]] = []
+        span_sequence = cast("Sequence[object]", value)
+        for span in span_sequence:
+            if not isinstance(span, Sequence):
+                msg = "Each span must be a tuple or list"
+                raise TypeError(msg)
+            span_seq = cast("Sequence[object]", span)
+            if len(span_seq) != EXPECTED_SPAN_LENGTH:
+                msg = "Each span must contain exactly two values"
+                raise ValueError(msg)
+            start_obj = span_seq[0]
+            end_obj = span_seq[1]
+            if not isinstance(start_obj, int) or not isinstance(end_obj, int):
+                msg = "Span boundaries must be integers"
+                raise TypeError(msg)
+            start = start_obj
+            end = end_obj
+            if start < 1 or end < start:
+                msg = "Span boundaries must be 1-based with end >= start"
+                raise ValueError(msg)
+            normalised.append((start, end))
+        return normalised
 
 
 class TriageResult(BaseModel):
@@ -52,7 +92,7 @@ class TriageResult(BaseModel):
     file: str
     window_index: int
     triage_decision: Literal["drop", "keep", "maybe"]
-    relevance_score: float
+    relevance_score: float = Field(ge=0.0, le=1.0)
     quick_reason: str
     hints: list[str] = Field(default_factory=list)
 
@@ -68,12 +108,25 @@ class ImpactAssessment(BaseModel):
     risk_tags: list[str] = Field(default_factory=list)
     change_suggestion: str | None = None
     dependencies: list[str] = Field(default_factory=list)
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     lines: list[str] = Field(default_factory=list)
-    num_occurrences: int = 0
-    triage_decision: str | None = None
+    num_occurrences: int = Field(default=0, ge=0)
+    triage_decision: Literal["drop", "keep", "maybe"] | None = None
     commit: str | None = None
     hash: str | None = None
+
+    @field_validator("perspective_scores")
+    @classmethod
+    def _validate_scores(cls, value: dict[str, float]) -> dict[str, float]:
+        """Ensure perspective scores fall inside [0, 1]."""
+        for perspective, score in value.items():
+            if not 0.0 <= score <= 1.0:
+                msg = (
+                    "Perspective score for"
+                    f" '{perspective}' must be between 0 and 1 inclusive"
+                )
+                raise ValueError(msg)
+        return value
 
 
 class ImpactRunSummary(BaseModel):
